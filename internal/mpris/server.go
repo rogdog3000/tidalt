@@ -75,6 +75,8 @@ type PlayerState struct {
 	// case, meaning ALSA's plug layer is resampling/remixing.
 	ActiveDevice string
 	BitPerfect   bool
+	// SourceFormat is the decoded format label (e.g. "FLAC 24/96kHz"), or "".
+	SourceFormat string
 }
 
 // ErrAlreadyRunning is returned by Start when another tidalt instance already
@@ -254,7 +256,7 @@ func (c *Client) SendDevice(hwName string) error {
 // GetState fetches the current playback state from the running instance.
 func (c *Client) GetState() (PlayerState, error) {
 	var trackJSON, playlistJSON, status, device, shuffleMode string
-	var quality, activeDevice string
+	var quality, activeDevice, sourceFormat string
 	var bitPerfect bool
 	var position, duration, volume float64
 
@@ -266,7 +268,12 @@ func (c *Client) GetState() (PlayerState, error) {
 	// Fall back to the shorter form so a client can still read state from an
 	// older parent instance rather than failing outright.
 	err := call.Store(&trackJSON, &playlistJSON, &status, &position, &duration, &volume,
-		&device, &shuffleMode, &quality, &activeDevice, &bitPerfect)
+		&device, &shuffleMode, &quality, &activeDevice, &bitPerfect, &sourceFormat)
+	if err != nil {
+		sourceFormat = ""
+		err = call.Store(&trackJSON, &playlistJSON, &status, &position, &duration, &volume,
+			&device, &shuffleMode, &quality, &activeDevice, &bitPerfect)
+	}
 	if err != nil {
 		quality, activeDevice, bitPerfect = "", "", true
 		if err := call.Store(&trackJSON, &playlistJSON, &status, &position, &duration, &volume,
@@ -286,6 +293,7 @@ func (c *Client) GetState() (PlayerState, error) {
 		Quality:          quality,
 		ActiveDevice:     activeDevice,
 		BitPerfect:       bitPerfect,
+		SourceFormat:     sourceFormat,
 	}, nil
 }
 
@@ -399,10 +407,10 @@ func (a *tidalApp) SetDevice(hwName string) *dbus.Error {
 // GetState returns the current playback state for client instances.
 //
 //nolint:gocritic // multiple D-Bus property values are returned together by design
-func (a *tidalApp) GetState() (string, string, string, float64, float64, float64, string, string, string, string, bool, *dbus.Error) {
+func (a *tidalApp) GetState() (string, string, string, float64, float64, float64, string, string, string, string, bool, string, *dbus.Error) {
 	ps := a.state.get()
 	return ps.CurrentTrackJSON, ps.PlaylistJSON, ps.PlaybackStatus, ps.Position, ps.Duration, ps.Volume,
-		ps.Device, ps.ShuffleMode, ps.Quality, ps.ActiveDevice, ps.BitPerfect, nil
+		ps.Device, ps.ShuffleMode, ps.Quality, ps.ActiveDevice, ps.BitPerfect, ps.SourceFormat, nil
 }
 
 // --- org.freedesktop.DBus.Properties ----------------------------------------

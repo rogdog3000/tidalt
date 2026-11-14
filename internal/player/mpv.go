@@ -149,6 +149,9 @@ type Player struct {
 	muPlug       sync.Mutex
 	plugFallback map[string]string
 
+	// source is what the current stream actually carries (guarded by muInfo).
+	source SourceFormat
+
 	// viz is a read-only copy of outgoing audio for the spectrum visualizer.
 	viz vizTap
 
@@ -229,6 +232,14 @@ func (p *Player) AudioPath() (device string, bitPerfect bool) {
 		return "", true
 	}
 	return p.activeDevice, p.bitPerfect
+}
+
+// SourceFormat reports what the current stream actually carries. The zero
+// value means no stream has been opened yet.
+func (p *Player) SourceFormat() SourceFormat {
+	p.muInfo.RLock()
+	defer p.muInfo.RUnlock()
+	return p.source
 }
 
 func NewPlayer() *Player {
@@ -728,8 +739,10 @@ func (p *Player) playbackLoop(ctx context.Context, url, device string, releaseRe
 		"bits", bits,
 		"samples", info.NSamples,
 	)
+	logger.L.Info("stream format", "source", info.Source.Label())
 
 	p.muInfo.Lock()
+	p.source = info.Source
 	p.sampleRate = sampleRate
 	p.channels = channels
 	p.bitsPerSample = bits
@@ -1240,7 +1253,9 @@ func (p *Player) playbackLoop(ctx context.Context, url, device string, releaseRe
 				bps = ah.bytesPerSample
 			}
 
+			logger.L.Info("stream format", "source", newInfo.Source.Label())
 			p.muInfo.Lock()
+			p.source = newInfo.Source
 			p.sampleRate = sampleRate
 			p.channels = channels
 			p.bitsPerSample = bits

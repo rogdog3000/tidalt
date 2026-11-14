@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"unsafe" //nolint:gocritic // dupImport false positive: cgo "C" pseudo-package aliases unsafe
@@ -22,6 +24,37 @@ type streamInfo struct {
 	NChannels     uint8
 	BitsPerSample uint8 // always 32 (S32LE output from avcodec path)
 	NSamples      uint64
+
+	// Source describes what the stream actually contains (codec, depth,
+	// lossless), independent of the S32LE container it is decoded into.
+	Source SourceFormat
+}
+
+// SourceFormat describes the audio a stream actually carries. Tidal can hand
+// back a lossy AAC stream even when a lossless tier was requested, so this is
+// the honest answer to "what am I listening to".
+type SourceFormat struct {
+	Codec      string // FFmpeg codec name, e.g. "flac", "aac"
+	Bits       uint8  // source bit depth; 0 for lossy codecs / unknown
+	SampleRate uint32
+	Lossless   bool
+}
+
+// Label renders the format for display, e.g. "FLAC 24/96kHz" or
+// "AAC 44.1kHz lossy". Returns "" for the zero value.
+func (f SourceFormat) Label() string {
+	if f.Codec == "" {
+		return ""
+	}
+	khz := strconv.FormatFloat(float64(f.SampleRate)/1000, 'f', -1, 64) + "kHz"
+	name := strings.ToUpper(f.Codec)
+	if !f.Lossless {
+		return name + " " + khz + " lossy"
+	}
+	if f.Bits > 0 {
+		return fmt.Sprintf("%s %d/%s", name, f.Bits, khz)
+	}
+	return name + " " + khz
 }
 
 // audioStream wraps an avcodec decoder and its associated HTTP response.
@@ -174,6 +207,12 @@ func openStream(ctx context.Context, url string) (*http.Response, *audioStream, 
 		NChannels:     uint8(dec.d.channels),
 		BitsPerSample: 32,
 		NSamples:      uint64(dec.d.n_samples),
+		Source: SourceFormat{
+			Codec:      C.GoString(&dec.d.codec_name[0]),
+			Bits:       uint8(dec.d.source_bits),
+			SampleRate: uint32(dec.d.sample_rate),
+			Lossless:   dec.d.lossless != 0,
+		},
 	}
 	return resp, &audioStream{Info: info, decoder: dec}, nil
 }

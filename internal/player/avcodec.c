@@ -5,6 +5,7 @@
 #include <libavutil/log.h>
 #include <libavutil/opt.h>
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -59,6 +60,13 @@ int av_open(av_decoder_t *d, void *opaque) {
 
     rc = avcodec_open2(d->codec_ctx, codec, NULL);
     if (rc < 0) return rc;
+
+    snprintf(d->codec_name, sizeof(d->codec_name), "%s", avcodec_get_name(codec->id));
+    int raw_bits = d->codec_ctx->bits_per_raw_sample;
+    if (raw_bits <= 0) raw_bits = st->codecpar->bits_per_raw_sample;
+    d->source_bits = raw_bits > 0 && raw_bits <= 64 ? (uint8_t)raw_bits : 0;
+    const AVCodecDescriptor *desc = avcodec_descriptor_get(codec->id);
+    d->lossless = desc && (desc->props & AV_CODEC_PROP_LOSSLESS) ? 1 : 0;
 
     // swresample: codec output → S32LE interleaved, same rate/channels.
     d->swr = swr_alloc();

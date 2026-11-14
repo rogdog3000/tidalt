@@ -34,6 +34,12 @@ typedef struct {
     uint32_t          sample_rate;
     uint8_t           channels;
     int64_t           n_samples;   // total samples/channel; 0 if unknown
+
+    // What the source actually is, as opposed to the tier that was asked
+    // for: Tidal can serve AAC for tracks that have no lossless master.
+    char              codec_name[32]; // e.g. "flac", "aac"
+    uint8_t           source_bits;    // bits_per_raw_sample; 0 if not meaningful
+    uint8_t           lossless;       // codec has AV_CODEC_PROP_LOSSLESS
 } av_decoder_t;
 
 // av_open opens an AVFormatContext using a custom AVIO context that calls

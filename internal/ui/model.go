@@ -176,6 +176,10 @@ type Model struct {
 	// badge and device label must not claim untouched output.
 	activeDevice string
 	bitPerfect   bool
+	// sourceFormat is what the stream actually carries (e.g. "FLAC 24/96kHz",
+	// "AAC 44.1kHz lossy"). currentQuality is only the tier that was asked
+	// for, which Tidal does not always honour.
+	sourceFormat string
 	volume       float64
 	isPlaying    bool
 	advancing    bool   // true while auto-advancing to next track; suppresses re-trigger
@@ -830,6 +834,7 @@ func (m *Model) pushState() {
 		Quality:          string(m.currentQuality),
 		ActiveDevice:     m.activeDevice,
 		BitPerfect:       m.bitPerfect,
+		SourceFormat:     m.sourceFormat,
 	}, m.isPlaying)
 }
 
@@ -932,6 +937,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.advancing = false
 		m.currentQuality = msg.quality
+		m.sourceFormat = "" // refreshed from the decoder on the next tick
 		// Update currentTrack with refreshed metadata (includes cover UUID).
 		if msg.track != nil {
 			m.currentTrack = msg.track
@@ -1011,6 +1017,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// engage mid-session (e.g. on resume), and the badge/device
 			// label must stop claiming bit-perfect output when it does.
 			m.activeDevice, m.bitPerfect = m.player.AudioPath()
+			m.sourceFormat = m.player.SourceFormat().Label()
 			logger.L.Debug("tick: progress state",
 				"currPos", m.currPos,
 				"duration", m.duration,
@@ -1074,6 +1081,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentQuality = tidal.Quality(ps.Quality)
 		m.activeDevice = ps.ActiveDevice
 		m.bitPerfect = ps.BitPerfect
+		m.sourceFormat = ps.SourceFormat
 		if ps.ShuffleMode != "" {
 			switch ps.ShuffleMode {
 			case "Random":

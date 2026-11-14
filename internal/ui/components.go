@@ -268,7 +268,13 @@ func (m *Model) renderNowPlayingBar(t Theme, w int) string {
 	head := left + strings.Repeat(" ", pad) + status
 
 	badge := ""
-	if q := m.currentQuality.Label(); q != "" {
+	// Prefer the decoded format over the requested tier: a "lossless" request
+	// can still come back as AAC.
+	q := m.sourceFormat
+	if q == "" {
+		q = m.currentQuality.Label()
+	}
+	if q != "" {
 		// When the plughw: fallback engaged, ALSA is resampling/remixing, so
 		// the granted tier no longer describes what reaches the DAC. Mark the
 		// badge rather than letting it assert untouched output.
