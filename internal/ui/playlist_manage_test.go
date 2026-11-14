@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -119,5 +120,42 @@ func TestOverlaysRender(t *testing.T) {
 	m.openDeletePlaylist(m.playlists[0])
 	if m.renderConfirmDelete(m.theme) == "" {
 		t.Error("delete confirmation rendered empty")
+	}
+}
+
+// Top tracks open as a browsable list (like an album) and Esc returns to the
+// artist view, rather than the tracks replacing the queue.
+func TestArtistTopTracksOpensList(t *testing.T) {
+	m := newSmokeModel()
+	m.showArtist = true
+	m.artistID = 9
+	m.artistName = "Pierce The Veil"
+	m.artistCursor = 1
+	queue := len(m.tracks)
+
+	mm, cmd := m.handleKey(key(keyEnter))
+	m = asModel(t, mm)
+	if cmd == nil || !m.artistLoading {
+		t.Fatal("Enter on Top tracks should start loading them")
+	}
+
+	top := []tidal.Track{{ID: 7, Title: "Caraphernelia"}, {ID: 8, Title: "Bulls In The Bronx"}}
+	mm, _ = m.Update(artistAlbumTracksMsg{album: tidal.Album{Title: topTracksTitle}, tracks: top})
+	m = asModel(t, mm)
+	if m.artistAlbum == nil || len(m.artistAlbumTracks) != 2 {
+		t.Fatalf("top tracks not shown as a list: %+v", m.artistAlbum)
+	}
+	if len(m.tracks) != queue {
+		t.Error("queue changed just by opening top tracks")
+	}
+	m.width, m.height = 100, 30
+	if got := m.renderArtistAlbumPane(m.theme, 80, 20); !strings.Contains(got, "TOP TRACKS") {
+		t.Error("pane title should say TOP TRACKS")
+	}
+
+	mm, _ = m.handleKey(key(keyEsc))
+	m = asModel(t, mm)
+	if m.artistAlbum != nil || !m.showArtist {
+		t.Error("Esc should return to the artist view")
 	}
 }

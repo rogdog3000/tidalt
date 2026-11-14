@@ -648,12 +648,15 @@ func (m Model) updateArtist(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return tracksMsg(tracks)
 			}
 		case 1: // ★ Top tracks
+			// List them like an opened album (ID 0 marks the synthetic list)
+			// instead of replacing the queue; Enter on a track plays from it.
+			m.artistLoading = true
 			return m, func() tea.Msg {
 				tracks, err := m.client.GetArtistTopTracks(m.ctx, artistID, 100)
 				if err != nil {
 					return errMsg(err)
 				}
-				return tracksMsg(tracks)
+				return artistAlbumTracksMsg{album: tidal.Album{Title: topTracksTitle}, tracks: tracks}
 			}
 		default:
 			// Open the album to view its tracks (does not load the queue yet).

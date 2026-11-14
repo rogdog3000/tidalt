@@ -271,6 +271,9 @@ func (m *Model) renderArtistPane(t Theme, w, h int) string {
 	return renderListPanel(t, title, true, rows, m.artistCursor, w, h)
 }
 
+// topTracksTitle names the synthetic "album" holding an artist's top tracks.
+const topTracksTitle = "Top tracks"
+
 // renderArtistAlbumPane lists the tracks of an album opened inside the artist
 // drill-down.
 func (m *Model) renderArtistAlbumPane(t Theme, w, h int) string {
@@ -292,6 +295,9 @@ func (m *Model) renderArtistAlbumPane(t Theme, w, h int) string {
 		rows = append(rows, t.RowDim.Render("No tracks."))
 	}
 	title := "ALBUM · " + strings.ToUpper(m.artistAlbum.Title)
+	if m.artistAlbum.ID == 0 && m.artistAlbum.Title == topTracksTitle {
+		title = "ARTIST · " + strings.ToUpper(m.artistName) + " · TOP TRACKS"
+	}
 	return renderListPanel(t, title, true, rows, m.artistAlbumCursor, w, h)
 }
 
