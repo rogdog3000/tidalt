@@ -141,8 +141,10 @@ The interface has two focus zones: the **sidebar** (section navigation) and the
 | `r`                | Start a radio queue from the selected track                   |
 | `a`                | Open the artist view for the selected track                   |
 | `f`                | Toggle favorite on the selected track                         |
-| `S`                | Save the current queue as a new playlist                      |
+| `S`                | Save the current queue as a new playlist (prompts for a name) |
 | `x`                | Remove the selected track from the queue                      |
+| `n` (Playlists)    | Create a new empty playlist                                   |
+| `x` (Playlists)    | Delete the selected playlist (asks to confirm with `y`)       |
 | `C`                | Clear the queue                                               |
 | `t`                | Cycle the color theme                                         |
 | `9` / `0`          | Volume down / up 5%                                           |

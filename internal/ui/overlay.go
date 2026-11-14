@@ -31,6 +31,10 @@ func (m Model) updateOverlay(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.updateAddToPlaylist(k)
 	case OverlayImportSpotify:
 		return m.updateImportSpotify(k)
+	case OverlayPlaylistName:
+		return m.updatePlaylistName(k)
+	case OverlayConfirmDelete:
+		return m.updateConfirmDelete(k)
 	default:
 		if k.String() == keyEsc {
 			m.overlay = OverlayNone

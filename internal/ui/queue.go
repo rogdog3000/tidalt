@@ -114,17 +114,15 @@ func (m *Model) queueHeader(t Theme) string {
 	}
 }
 
-// beginSaveQueue saves the current queue as a brand-new playlist. The name is
-// derived from the source for now (a name prompt can come later); the command
+// saveQueueAsNew prompts for a name (prefilled from the queue's origin), then
 // creates the playlist and appends every queue track.
 func (m Model) saveQueueAsNew() (tea.Model, tea.Cmd) {
 	if len(m.tracks) == 0 {
 		m.errText = "Queue is empty — nothing to save"
 		return m, tea.Tick(3*time.Second, func(time.Time) tea.Msg { return clearErrMsg{} })
 	}
-	name := m.suggestedQueueName()
-	cmd := m.saveQueueCmd(name)
-	return m, cmd
+	m.openPlaylistNamePrompt(nameForQueueSave, m.suggestedQueueName())
+	return m, nil
 }
 
 // suggestedQueueName proposes a playlist name from the queue's origin or the

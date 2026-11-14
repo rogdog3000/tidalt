@@ -56,6 +56,8 @@ const (
 	OverlayDeviceSelect
 	OverlayAddToPlaylist
 	OverlayImportSpotify
+	OverlayPlaylistName
+	OverlayConfirmDelete
 )
 
 //nolint:recvcheck // tea.Model requires value-receiver Init/Update/View; helper methods mutate via pointer receiver
@@ -85,7 +87,15 @@ type Model struct {
 
 	// Spotify-import overlay state: the URL input, the resolved source, the
 	// matched/"not available" rows, the flow stage, and the list cursor.
-	importInput  textinput.Model
+	importInput textinput.Model
+
+	// Playlist name prompt (new empty playlist, or save queue as new) and the
+	// playlist awaiting delete confirmation.
+	nameInput    textinput.Model
+	namePurpose  playlistNamePurpose
+	nameError    string
+	deleteTarget *tidal.Playlist
+
 	importSource *spotify.Source
 	importRows   []importRow
 	importStage  importStage
@@ -1350,7 +1360,20 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.queueSource = "playlist:" + msg.name
 		m.queueDirty = false
 		m.toast = fmt.Sprintf("✓ Saved %q — %d tracks", msg.name, msg.count)
-		return m, toastClearCmd()
+		// The playlist list is cached; drop it so the new/updated playlist and
+		// its track count show up.
+		m.playlists = nil
+		reload := tea.Cmd(nil)
+		if m.section == SecPlaylists {
+			reload = m.loadSection(SecPlaylists)
+		}
+		return m, tea.Batch(toastClearCmd(), reload)
+
+	case playlistCreatedMsg:
+		return m, m.handlePlaylistCreated(msg)
+
+	case playlistDeletedMsg:
+		return m, m.handlePlaylistDeleted(msg)
 
 	case spotifyResolvedMsg:
 		if m.overlay != OverlayImportSpotify {
@@ -1688,6 +1711,17 @@ func (m *Model) footerKeyBar(t Theme, w int) string {
 			{":", "Command"},
 			{"q", "Quit"},
 		}
+	case SecPlaylists:
+		if !m.detailFocus {
+			base = [][2]string{
+				{"j/k", "Move"},
+				{"↵", "Open"},
+				{"n", "New"},
+				{"x", "Delete"},
+				{":", "Command"},
+				{"q", "Quit"},
+			}
+		}
 	case SecSettings:
 		base = [][2]string{
 			{"j/k", "Preview"}, {"↵", "Apply"}, {"t", "Cycle"}, {"Esc", "Cancel"}, {"q", "Quit"},
@@ -1711,6 +1745,10 @@ func (m *Model) renderOverlay(t Theme, base string) string {
 		popup = m.renderAddToPlaylist(t)
 	case OverlayImportSpotify:
 		popup = m.renderImportSpotify(t)
+	case OverlayPlaylistName:
+		popup = m.renderPlaylistName(t)
+	case OverlayConfirmDelete:
+		popup = m.renderConfirmDelete(t)
 	case OverlayActionSheet:
 		popup = m.renderActionSheet(t)
 		anchorCentered = false

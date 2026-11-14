@@ -48,6 +48,10 @@ func allPaletteItems() []paletteItem {
 			m.overlay = OverlayNone
 			return m.beginSaveToExisting()
 		}},
+		{icon: "≡", label: "New playlist…", hint: "empty", group: "ACTIONS", run: func(m Model) (tea.Model, tea.Cmd) {
+			m.openPlaylistNamePrompt(nameForEmptyPlaylist, "")
+			return m, nil
+		}},
 		{icon: "✕", label: "Clear queue", group: "ACTIONS", run: func(m Model) (tea.Model, tea.Cmd) {
 			m.overlay = OverlayNone
 			m.clearQueue()

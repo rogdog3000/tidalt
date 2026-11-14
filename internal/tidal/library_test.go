@@ -178,3 +178,28 @@ func TestSearchAll_Error(t *testing.T) {
 		t.Fatal("expected error on 500")
 	}
 }
+
+// --- Delete playlist ---
+
+func TestDeletePlaylist(t *testing.T) {
+	for _, status := range []int{200, 204} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodDelete || !strings.HasSuffix(r.URL.Path, "/playlists/abc-123") {
+				t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			}
+			w.WriteHeader(status)
+		}))
+		if err := newTestClient(srv).DeletePlaylist(context.Background(), "abc-123"); err != nil {
+			t.Errorf("status %d: unexpected error %v", status, err)
+		}
+		srv.Close()
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		respond(w, 403, map[string]any{"userMessage": "not yours"})
+	}))
+	defer srv.Close()
+	if err := newTestClient(srv).DeletePlaylist(context.Background(), "abc-123"); err == nil {
+		t.Error("expected an error for a 403")
+	}
+}

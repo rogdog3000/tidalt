@@ -347,3 +347,25 @@ func (c *Client) playlistETag(ctx context.Context, uuid string) (string, error) 
 	}
 	return resp.Header.Get("ETag"), nil
 }
+
+// DeletePlaylist permanently deletes a playlist the user owns.
+func (c *Client) DeletePlaylist(ctx context.Context, uuid string) error {
+	query := url.Values{}
+	query.Set("countryCode", c.Session.CountryCode)
+	u := fmt.Sprintf("%s/playlists/%s?%s", BaseURL, url.PathEscape(uuid), query.Encode())
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u, http.NoBody)
+	if err != nil {
+		return err
+	}
+	resp, err := c.GetAuthClient(ctx).Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		b, _ := io.ReadAll(resp.Body)
+		return apiErr("delete playlist", resp.StatusCode, b)
+	}
+	return nil
+}

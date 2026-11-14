@@ -55,6 +55,12 @@ func (m Model) updatePlaylists(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			cmd := m.loadPlaylistDetail(pl)
 			return m, cmd
 		}
+	case "n":
+		m.openPlaylistNamePrompt(nameForEmptyPlaylist, "")
+	case "x":
+		if m.cursor >= 0 && m.cursor < len(m.playlists) {
+			m.openDeletePlaylist(m.playlists[m.cursor])
+		}
 	}
 	return m, nil
 }

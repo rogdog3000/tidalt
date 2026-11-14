@@ -66,7 +66,7 @@ func (m *Model) handleGlobalKey(_ *Model, k tea.KeyMsg) (tea.Cmd, bool) {
 		return m.quit(), true
 	case "q":
 		// In a focused text input, "q" is literal text — don't quit.
-		if m.searchInput.Focused() || m.overlay == OverlayCommandPalette {
+		if m.textEntryActive() {
 			return nil, false
 		}
 		return m.quit(), true
@@ -75,14 +75,14 @@ func (m *Model) handleGlobalKey(_ *Model, k tea.KeyMsg) (tea.Cmd, bool) {
 		if m.overlay == OverlayCommandPalette {
 			return nil, true
 		}
-		if m.searchInput.Focused() {
+		if m.textEntryActive() {
 			return nil, false
 		}
 		m.openCommandPalette()
 		return nil, true
 
 	case "t":
-		if m.searchInput.Focused() || m.section == SecSettings {
+		if m.textEntryActive() || m.section == SecSettings {
 			return nil, false // Settings owns "t"; input treats it as text
 		}
 		m.cycleTheme()
