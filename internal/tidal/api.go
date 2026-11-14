@@ -83,8 +83,41 @@ type Track struct {
 		Title string `json:"title"`
 		Cover string `json:"cover"` // UUID, e.g. "a3f1d2e4-1234-5678-abcd-ef0123456789"
 	} `json:"album"`
+	// Version distinguishes edits of the same title, e.g. "VIP Mix" or
+	// "Sammy Virji Remix". Empty for the original.
+	Version  string `json:"version"`
 	Duration int    `json:"duration"`
 	URL      string `json:"url"`
+}
+
+// DisplayTitle is the title with its version appended ("Song (VIP Mix)"),
+// unless the title already carries it.
+func (t Track) DisplayTitle() string {
+	v := strings.TrimSpace(t.Version)
+	if v == "" || strings.Contains(strings.ToLower(t.Title), strings.ToLower(v)) {
+		return t.Title
+	}
+	return t.Title + " (" + v + ")"
+}
+
+// ArtistNames joins every credited artist ("A, B & C"), falling back to the
+// singular Artist when the endpoint did not return the plural list.
+func (t Track) ArtistNames() string {
+	names := make([]string, 0, len(t.Artists))
+	seen := map[string]bool{}
+	for _, a := range t.Artists {
+		if a.Name != "" && !seen[a.Name] {
+			seen[a.Name] = true
+			names = append(names, a.Name)
+		}
+	}
+	if len(names) == 0 {
+		return t.Artist.Name
+	}
+	if len(names) == 1 {
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " & " + names[len(names)-1]
 }
 
 type Mix struct {

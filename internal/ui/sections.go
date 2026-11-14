@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -64,49 +65,105 @@ func (m *Model) queueCoverWidth(paneW int) (int, bool) {
 	if paneW < minCoverPaneW || m.bodyHeight() < minCoverBodyH {
 		return 0, false
 	}
-	w := min(max(paneW/3, 26), 44)
+	w := min(max(paneW/3, 26), 60)
 	return w, true
 }
 
-// renderQueueCover renders the cover panel for the track under the cursor. The
-// crisp Kitty image (when supported) is written to the TTY separately; this
-// draws the box
-// (block art / placeholder) and the track metadata.
+// renderQueueCover renders the cover panel for the track under the cursor: a
+// square cover (the crisp Kitty image, when supported, is written to the TTY
+// separately over the blank box drawn here), the track metadata, and the
+// spectrum visualizer filling whatever height is left.
 func (m *Model) renderQueueCover(t Theme, w, h int) string {
 	tr := m.hoveredTrack()
 	if tr == nil {
 		return renderPanel(t, "", false, w, h, t.RowDim.Render("No track selected."))
 	}
-	panelW, imgRows := m.queueCoverDims(w, h)
+	d := m.queueCoverDims(w, h)
 
 	var b strings.Builder
+	pad := strings.Repeat(" ", d.imgOff)
 	if m.useKittyCover() {
-		for range imgRows {
-			b.WriteString(strings.Repeat(" ", panelW))
+		for range d.imgRows {
+			b.WriteString(strings.Repeat(" ", d.panelW))
+			b.WriteByte('\n')
+		}
+	} else if m.coverImage != nil {
+		art := strings.Split(strings.TrimRight(renderBlockArt(m.coverImage, d.imgCols, d.imgRows), "\n"), "\n")
+		for i := range d.imgRows {
+			if i < len(art) {
+				b.WriteString(pad + art[i])
+			}
 			b.WriteByte('\n')
 		}
 	} else {
-		cover := coverPanelLines(m.coverImage, "", "", "", panelW, imgRows)
-		for _, ln := range cover {
-			b.WriteString(ln)
-			b.WriteByte('\n')
+		for range d.imgRows {
+			b.WriteString(pad + strings.Repeat("░", d.imgCols) + "\n")
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(t.Row.Render(truncateStr(tr.Title, panelW)) + "\n")
-	b.WriteString(t.RowDim.Render(truncateStr(tr.Artist.Name, panelW)) + "\n")
-	b.WriteString(t.RowFaint.Render(truncateStr(tr.Album.Title, panelW)))
+	b.WriteString(t.Row.Render(truncateStr(tr.DisplayTitle(), d.panelW)) + "\n")
+	b.WriteString(t.RowDim.Render(truncateStr(tr.ArtistNames(), d.panelW)) + "\n")
+	b.WriteString(t.RowFaint.Render(truncateStr(tr.Album.Title, d.panelW)))
+	if d.vizRows > 0 {
+		b.WriteString("\n\n")
+		b.WriteString(renderVisualizer(t, &m.viz, d.panelW, d.vizRows))
+	}
 
 	return renderPanel(t, "", false, w, h, b.String())
 }
 
-// queueCoverDims returns the cover image's cell width and row count inside the
-// Queue's cover panel of outer size w×h.
-func (m *Model) queueCoverDims(w, h int) (panelW, imgRows int) {
-	panelW = max(w-2, 1)
+// coverDims is the geometry inside the Queue's cover panel.
+type coverDims struct {
+	panelW  int // inner width
+	imgCols int // cover width in cells
+	imgRows int // cover height in cells
+	imgOff  int // left offset that centres the cover
+	vizRows int // visualizer height (0 = hidden)
+}
+
+// queueCoverDims lays out the cover panel of outer size w×h: a cover sized to
+// stay square on screen given the terminal's cell aspect, 4 metadata lines, and
+// the visualizer in the rest.
+func (m *Model) queueCoverDims(w, h int) coverDims {
+	const metaRows = 4 // blank + title + artist + album
+	panelW := max(w-2, 1)
 	innerH := max(h-2, 2)
-	imgRows = min(max(innerH-4, 2), innerH)
-	return panelW, imgRows
+	aspect := m.cellAspect
+	if aspect <= 0 {
+		aspect = 2.0
+	}
+	maxImgRows := max(innerH-metaRows, 2)
+	imgRows := min(max(int(math.Round(float64(panelW)/aspect)), 2), maxImgRows)
+	imgCols := min(max(int(math.Round(float64(imgRows)*aspect)), 1), panelW)
+	d := coverDims{
+		panelW:  panelW,
+		imgCols: imgCols,
+		imgRows: imgRows,
+		imgOff:  (panelW - imgCols) / 2,
+	}
+	if rest := innerH - imgRows - metaRows - 1; rest >= 3 {
+		d.vizRows = rest
+	}
+	return d
+}
+
+// vizBandCount is how many visualizer bars the current layout shows.
+func (m *Model) vizBandCount() int {
+	_, mainW := m.layoutDims()
+	if coverW, ok := m.queueCoverWidth(mainW); ok {
+		return vizBandsFor(max(coverW-2, 1))
+	}
+	return numBars
+}
+
+// vizActive reports whether the visualizer still has bars falling.
+func (m *Model) vizActive() bool {
+	for _, p := range m.viz.peak {
+		if p > 0.01 {
+			return true
+		}
+	}
+	return false
 }
 
 // hoveredTrack is the track the Queue cover should show: the one under the
@@ -208,6 +265,9 @@ func (m *Model) renderArtistPane(t Theme, w, h int) string {
 		}
 	}
 	title := "ARTIST · " + strings.ToUpper(m.artistName)
+	if m.albumOnly {
+		title = "ALBUM"
+	}
 	return renderListPanel(t, title, true, rows, m.artistCursor, w, h)
 }
 

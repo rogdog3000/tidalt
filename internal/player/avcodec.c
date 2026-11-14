@@ -2,6 +2,7 @@
 // avcodec.h. See avcodec.go for the Go side of this boundary.
 #include "avcodec.h"
 
+#include <libavutil/log.h>
 #include <libavutil/opt.h>
 
 #include <stdlib.h>
@@ -11,6 +12,11 @@
 
 int av_open(av_decoder_t *d, void *opaque) {
     memset(d, 0, sizeof(*d));
+
+    // FFmpeg logs to stderr by default, which draws over the TUI (e.g. the
+    // AAC "Could not update timestamps for discarded samples" warning).
+    // Errors still reach Go through the return codes.
+    av_log_set_level(AV_LOG_QUIET);
 
     unsigned char *avio_buf = (unsigned char *)av_malloc(AVIO_BUF_SIZE);
     if (!avio_buf) return AVERROR(ENOMEM);

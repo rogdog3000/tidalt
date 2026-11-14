@@ -118,7 +118,7 @@ func (m Model) updateSearchKeys(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // activateSearchRow performs the default action for the selected result:
-// play a track, drill into an artist, or load an album into the queue.
+// play a track, drill into an artist, or open an album's track list.
 func (m Model) activateSearchRow() (tea.Model, tea.Cmd) {
 	row, ok := m.selectedSearchRow()
 	if !ok {
@@ -134,8 +134,7 @@ func (m Model) activateSearchRow() (tea.Model, tea.Cmd) {
 		a := m.searchResults.Artists[row.idx]
 		return m.openArtistByID(a.ID, a.Name)
 	case rowAlbum:
-		cmd := m.openAlbum(m.searchResults.Albums[row.idx].ID)
-		return m, cmd
+		return m.openAlbumView(m.searchResults.Albums[row.idx])
 	}
 	return m, nil
 }

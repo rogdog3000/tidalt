@@ -429,8 +429,8 @@ func buildMetadata(trackJSON string) map[string]dbus.Variant {
 		return meta
 	}
 	meta["mpris:trackid"] = dbus.MakeVariant(dbus.ObjectPath(fmt.Sprintf("/org/mpris/MediaPlayer2/Track/%d", t.ID)))
-	meta["xesam:title"] = dbus.MakeVariant(t.Title)
-	meta["xesam:artist"] = dbus.MakeVariant([]string{t.Artist.Name})
+	meta["xesam:title"] = dbus.MakeVariant(t.DisplayTitle())
+	meta["xesam:artist"] = dbus.MakeVariant([]string{t.ArtistNames()})
 	meta["xesam:album"] = dbus.MakeVariant(t.Album.Title)
 	// MPRIS2 requires length in microseconds.
 	meta["mpris:length"] = dbus.MakeVariant(int64(t.Duration) * 1_000_000)

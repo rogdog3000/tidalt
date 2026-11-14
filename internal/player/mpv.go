@@ -149,6 +149,9 @@ type Player struct {
 	muPlug       sync.Mutex
 	plugFallback map[string]string
 
+	// viz is a read-only copy of outgoing audio for the spectrum visualizer.
+	viz vizTap
+
 	// Atomics: safe for concurrent access without a mutex
 	samplesPlayed uint64
 	paused        uint32 // 0 = playing, 1 = paused
@@ -169,7 +172,8 @@ func (p *Player) getDevice() (string, error) {
 	override := p.deviceOverride
 	p.mu.Unlock()
 	if override != "" {
-		return override, nil
+		// A persisted card-id name resolves to the card's current number.
+		return ResolveDevice(override), nil
 	}
 	return detectDevice()
 }
@@ -798,6 +802,10 @@ func (p *Player) playbackLoop(ctx context.Context, url, device string, releaseRe
 		stopDecode := make(chan struct{})
 		pcmCh := make(chan pcmBuf, 2)
 
+		p.viz.reset()
+		atomic.StoreUint32(&p.viz.rate, uint32(ah.rate))
+		atomic.StoreInt64(&p.viz.lag, int64(ah.bufferSize))
+
 		// Dropout detection. snd_pcm_writei blocks until the device accepts the
 		// frames, so the time it blocks measures how much headroom the DAC had.
 		// Such a write still returns a positive frame count, so no error path
@@ -1064,6 +1072,7 @@ func (p *Player) playbackLoop(ctx context.Context, url, device string, releaseRe
 					}
 					continue
 				}
+				p.viz.push(pcm.data[off:], int(written), int(channels), bps)
 				framesDone += int(written)
 			}
 			atomic.AddUint64(&p.samplesPlayed, uint64(pcm.nFrames))

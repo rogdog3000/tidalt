@@ -266,6 +266,10 @@ func (m Model) updateSection(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.artistAlbum = nil
 			m.artistAlbumTracks = nil
 			m.artistAlbumCursor = 0
+			if m.albumOnly {
+				m.albumOnly = false
+				m.showArtist = false
+			}
 		case m.showArtist:
 			m.showArtist = false
 		case m.section == SecPlaylists && m.detailFocus:
@@ -564,6 +568,29 @@ func (m *Model) openAlbum(albumID int) tea.Cmd {
 	}
 }
 
+// openAlbumView opens an album's track list in the drill-down view (without
+// touching the queue); Enter on a track then loads the album and plays from it.
+func (m Model) openAlbumView(album tidal.Album) (tea.Model, tea.Cmd) {
+	if album.ID == 0 {
+		return m, nil
+	}
+	m.prevSection = m.section
+	m.artistLoading = true
+	m.showArtist = true
+	m.albumOnly = true
+	m.artistAlbum = nil
+	m.artistAlbumTracks = nil
+	m.focusMain = true
+	id := strconv.Itoa(album.ID)
+	return m, func() tea.Msg {
+		tracks, err := m.client.GetAlbumTracks(m.ctx, id)
+		if err != nil {
+			return errMsg(err)
+		}
+		return artistAlbumTracksMsg{album: album, tracks: tracks}
+	}
+}
+
 // openArtistFor opens the transient artist drill-down for a track's artist.
 func (m Model) openArtistFor(t *tidal.Track) (tea.Model, tea.Cmd) {
 	if t == nil {
@@ -591,6 +618,11 @@ func (m Model) updateArtist(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// When an album is open, navigate its track list instead of the album list.
 	if m.artistAlbum != nil {
 		return m.updateArtistAlbum(k)
+	}
+	// A directly-opened album is still loading: there is no artist list
+	// underneath, so ignore keys until its tracks arrive.
+	if m.albumOnly {
+		return m, nil
 	}
 	switch k.String() {
 	case keyUp, "k":
@@ -652,6 +684,10 @@ func (m Model) updateArtistAlbum(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.artistAlbum = nil
 		m.artistAlbumTracks = nil
 		m.artistAlbumCursor = 0
+		if m.albumOnly {
+			m.albumOnly = false
+			m.showArtist = false
+		}
 		return m, nil
 	case keyUp, "k":
 		if m.artistAlbumCursor > 0 {
@@ -668,6 +704,7 @@ func (m Model) updateArtistAlbum(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		i := m.artistAlbumCursor
 		m.showArtist = false
 		m.artistAlbum = nil
+		m.albumOnly = false
 		m.section = SecQueue
 		m.sidebarCursor = navIndexOf(SecQueue)
 		cmd := m.playListIntoQueue(tracks, i)

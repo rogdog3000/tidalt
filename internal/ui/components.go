@@ -185,7 +185,7 @@ func renderTrackRow(t Theme, tr tidal.Track, o rowOpts) string {
 		idx = t.RowFaint.Render(fmt.Sprintf("%2d ", o.index))
 	}
 
-	title := tr.Title
+	title := tr.DisplayTitle()
 	titleStyle := t.Row
 	if o.playing {
 		titleStyle = t.RowPlaying
@@ -209,8 +209,13 @@ func renderTrackRow(t Theme, tr tidal.Track, o rowOpts) string {
 	midRoom := max(o.width-fixed, 1)
 
 	mid := titleStyle.Render(title)
-	if o.showArtist && tr.Artist.Name != "" {
-		mid += t.RowFaint.Render(" — ") + t.RowDim.Render(tr.Artist.Name)
+	if o.showArtist {
+		if a := tr.ArtistNames(); a != "" {
+			mid += t.RowFaint.Render(" — ") + t.RowDim.Render(a)
+		}
+		if tr.Album.Title != "" && tr.Album.Title != tr.Title {
+			mid += t.RowFaint.Render(" · " + tr.Album.Title)
+		}
 	}
 	mid = truncateStr(mid, midRoom)
 
@@ -257,7 +262,7 @@ func (m *Model) renderNowPlayingBar(t Theme, w int) string {
 	// Right-aligned status (volume / device / shuffle) on the title row.
 	status := m.nowBarStatus(t)
 	titleRoom := max(inner-lipgloss.Width(eq)-1-lipgloss.Width(status)-1, 1)
-	title := t.RowPlaying.Render(truncateStr(m.currentTrack.Title, titleRoom))
+	title := t.RowPlaying.Render(truncateStr(m.currentTrack.DisplayTitle(), titleRoom))
 	left := eq + " " + title
 	pad := max(inner-lipgloss.Width(left)-lipgloss.Width(status), 0)
 	head := left + strings.Repeat(" ", pad) + status
@@ -273,7 +278,7 @@ func (m *Model) renderNowPlayingBar(t Theme, w int) string {
 		badge = t.RowFaint.Render(q)
 	}
 	artistRoom := max(inner-lipgloss.Width(badge)-1, 1)
-	artist := t.RowDim.Render(truncateStr(m.currentTrack.Artist.Name, artistRoom))
+	artist := t.RowDim.Render(truncateStr(m.currentTrack.ArtistNames(), artistRoom))
 	artistPad := max(inner-lipgloss.Width(artist)-lipgloss.Width(badge), 0)
 	artistRow := artist + strings.Repeat(" ", artistPad) + badge
 

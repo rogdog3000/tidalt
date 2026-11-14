@@ -125,6 +125,10 @@ type Model struct {
 	artistAlbum       *tidal.Album
 	artistAlbumTracks []tidal.Track
 	artistAlbumCursor int
+	// albumOnly is set when an album was opened directly (e.g. from Search)
+	// rather than from an artist's album list, so Esc closes the whole
+	// drill-down instead of falling back to an (empty) artist view.
+	albumOnly bool
 
 	// Library data loaded on demand for the favorites/playlists sections.
 	favSongs   []tidal.Track // the favorite-songs list (SecFavSongs)
@@ -192,6 +196,11 @@ type Model struct {
 	// lapses when playback stops and is restarted by the 1s tick on resume, so
 	// the UI doesn't re-render 12×/s while idle.
 	barsTicking bool
+
+	// viz is the smoothed spectrum for the visualizer under the cover.
+	viz vizState
+	// cellAspect is the terminal cell height÷width, so the cover stays square.
+	cellAspect float64
 
 	// MPRIS media key commands (nil in client mode)
 	mprisCh <-chan mpris.Event
@@ -316,7 +325,7 @@ func InitialModel(ctx context.Context, client *tidal.Client, s *store.SecretsSto
 
 	currentDevice := ""
 	if dev, err := s.LoadDevice(); err == nil {
-		currentDevice = dev
+		currentDevice = player.ResolveDevice(dev)
 		p.SetDevice(dev)
 	}
 
@@ -371,7 +380,7 @@ func ClientModel(ctx context.Context, client *tidal.Client, s *store.SecretsStor
 
 	currentDevice := ""
 	if dev, err := s.LoadDevice(); err == nil {
-		currentDevice = dev
+		currentDevice = player.ResolveDevice(dev)
 		p.SetDevice(dev)
 	}
 
@@ -647,7 +656,7 @@ func tickCmd() tea.Cmd {
 }
 
 func barTickCmd() tea.Cmd {
-	return tea.Tick(80*time.Millisecond, func(t time.Time) tea.Msg {
+	return tea.Tick(40*time.Millisecond, func(t time.Time) tea.Msg {
 		return barTickMsg(t)
 	})
 }
@@ -910,6 +919,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.rebuildProgress()
+		m.cellAspect = cellAspect()
 		// Force the cover to be re-emitted: a resize can leave stale Kitty
 		// placements behind even when the cover box lands on the same cells.
 		if m.kitty != nil {
@@ -968,12 +978,25 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case barTickMsg:
 		m.barFrame++
-		updateBars(m.barFrame, &m.barHeights, &m.barTargets, m.isPlaying)
+		var frame []float64
+		if m.isPlaying && !m.clientMode && m.player != nil {
+			frame = m.player.Spectrum(48)
+		}
+		m.viz.update(frame, m.vizBandCount())
+		if frame != nil {
+			// Drive the logo / mini EQ from the real spectrum too.
+			for b := range m.barHeights {
+				v := resampleAt(frame, b, len(m.barHeights))
+				m.barHeights[b] = barMin + int(v*float64(barMax-barMin))
+			}
+		} else if m.barFrame%2 == 0 {
+			updateBars(m.barFrame/2, &m.barHeights, &m.barTargets, m.isPlaying)
+		}
 		// The fast equaliser animation only needs to run while playing — when
 		// stopped the bars are flat and re-rendering 12×/s is wasted work. Drop
 		// to the 1s logo tick when idle; the 1s tick restarts this one when
 		// playback resumes.
-		if m.isPlaying {
+		if m.isPlaying || m.vizActive() {
 			return m, barTickCmd()
 		}
 		m.barsTicking = false
@@ -1286,6 +1309,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.artistLoading = false
 		m.artistAlbum = nil
 		m.artistAlbumTracks = nil
+		m.albumOnly = false
 		m.showArtist = true
 		m.focusMain = true
 
@@ -1295,12 +1319,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.artistAlbumTracks = msg.tracks
 		m.artistAlbumCursor = 0
 		m.artistLoading = false
+		m.showArtist = true
+		m.focusMain = true
 
 	case errMsg:
 		m.errText = msg.Error()
 		// Clear the artist-view spinner if a fetch failed while loading it,
 		// otherwise it would hang on "Loading artist...".
 		m.artistLoading = false
+		// A directly-opened album that failed to load has nothing to show.
+		if m.albumOnly && m.artistAlbum == nil {
+			m.showArtist = false
+			m.albumOnly = false
+		}
 		return m, tea.Tick(5*time.Second, func(time.Time) tea.Msg { return clearErrMsg{} })
 
 	case clearErrMsg:
@@ -1428,7 +1459,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case mpris.CmdSetDevice:
 			m.currentDevice = ev.Device
 			m.player.SetDevice(ev.Device)
-			_ = m.store.SaveDevice(ev.Device)
+			_ = m.store.SaveDevice(player.StableDeviceName(ev.Device))
 		}
 		return m, listenMPRIS(m.mprisCh)
 	}
@@ -1608,10 +1639,10 @@ func (m *Model) coverBoxRect() (col, row, panelW, imgRows int, ok bool) {
 		mainLeft = sidebarW + zoneGap
 	}
 	listW := mainW - coverW
-	pw, ir := m.queueCoverDims(coverW, m.bodyHeight())
-	col = mainLeft + listW + 1 /* cover panel left border */ + 1 /* 1-indexed */
-	row = 1 /* panel top border */ + 1                           /* 1-indexed */
-	return col, row, pw, ir, true
+	d := m.queueCoverDims(coverW, m.bodyHeight())
+	col = mainLeft + listW + 1 /* cover panel left border */ + 1 /* 1-indexed */ + d.imgOff
+	row = 1 /* panel top border */ + 1 /* 1-indexed */
+	return col, row, d.imgCols, d.imgRows, true
 }
 
 // footerKeyBar returns the context-sensitive key hint bar for the current

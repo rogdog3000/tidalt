@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/Benehiko/tidalt/v4/internal/player"
 	"github.com/Benehiko/tidalt/v4/internal/tidal"
 )
 
@@ -264,7 +265,7 @@ func (m Model) updateDeviceSelect(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.player.SetDevice(chosen.HWName)
-		_ = m.store.SaveDevice(chosen.HWName)
+		_ = m.store.SaveDevice(player.StableDeviceName(chosen.HWName))
 	}
 	return m, nil
 }

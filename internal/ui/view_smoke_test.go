@@ -505,3 +505,33 @@ func TestClientTintRenders(t *testing.T) {
 		t.Errorf("client mode should show the CLIENT badge")
 	}
 }
+
+// TestSearchAlbumOpensTrackList verifies Enter on a search album row opens the
+// album's track list (instead of silently replacing the queue), and Esc closes
+// it straight back to Search.
+func TestSearchAlbumOpensTrackList(t *testing.T) {
+	m := newSmokeModel()
+	m.width, m.height = 100, 20
+	m.section = SecSearch
+	m.focusMain = true
+	m.searchResults = tidal.SearchResults{Albums: []tidal.Album{{ID: 7, Title: "Death Stranding"}}}
+	m.searchCursor = 0
+
+	res, cmd := m.activateSearchRow()
+	nm := asModel(t, res)
+	if !nm.showArtist || !nm.albumOnly || cmd == nil {
+		t.Fatalf("enter on an album should open the album view and fetch tracks")
+	}
+
+	res, _ = nm.Update(artistAlbumTracksMsg{album: tidal.Album{ID: 7, Title: "Death Stranding"}, tracks: []tidal.Track{{ID: 1, Title: "BB's Theme"}}})
+	nm = asModel(t, res)
+	if !strings.Contains(stripANSI(nm.renderArtistPane(nm.theme, 80, 14)), "BB's Theme") {
+		t.Errorf("album view should list the album's tracks")
+	}
+
+	res, _ = nm.updateSection(tea.KeyMsg{Type: tea.KeyEsc})
+	nm = asModel(t, res)
+	if nm.showArtist || nm.albumOnly || nm.section != SecSearch {
+		t.Errorf("esc should close the album and return to search")
+	}
+}
